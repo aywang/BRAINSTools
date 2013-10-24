@@ -15,7 +15,6 @@ import re
 import sys
 import traceback
 
-import multiprocessing
 import time
 ##############################################################################
 
@@ -136,7 +135,7 @@ def DoSingleSubjectProcessing(sp_args):
     CACHE_ATLASPATH, CACHE_BCDMODELPATH, CLUSTER_QUEUE, CLUSTER_QUEUE_LONG, \
          ExperimentBaseDirectoryCache, ExperimentBaseDirectoryResults, subject_data_file, \
           GLOBAL_DATA_SINK_REWRITE, JOB_SCRIPT, WORKFLOW_COMPONENTS, \
-          input_arguments, mountPrefix,start_time,subjectid = sp_args
+          input_arguments, mountPrefix,start_time,subjectid,jobQstatSubstitute = sp_args
 
     while time.time() < start_time :
         time.sleep(start_time-time.time()+1)
@@ -179,7 +178,10 @@ def DoSingleSubjectProcessing(sp_args):
                 pass
             baw200.run(plugin=SGEFlavor,
                        plugin_args=dict(template=JOB_SCRIPT,
-                                        qsub_args="-S /bin/bash -cwd -pe smp1 1-12 -l h_vmem=19G,mem_free=9G -o /dev/null -e /dev/null " + CLUSTER_QUEUE))
+                                        qsub_args="-S /bin/bash -cwd -pe smp1 1-12 -l h_vmem=19G,mem_free=9G -o /dev/null -e /dev/null " + CLUSTER_QUEUE,
+                                        refQstatSubstitute=jobQstatSubstitute
+                                       )
+                       )
         elif input_arguments.wfrun == 'helium_all.q_graph':
             try:
                 #baw200.write_graph()
@@ -298,6 +300,12 @@ def MasterProcessingController(argv=None):
     import nipype.interfaces.io as nio   # Data i/o
     import nipype.pipeline.engine as pe  # pypeline engine
     from nipype.interfaces.freesurfer import ReconAll
+    from nipype.pipeline.plugins.sge import QstatSubstitute
+    import multiprocessing
+    manager = multiprocessing.Manager()
+    jobDictionary=manager.dict()
+
+    local_refQstatSubstitute=QstatSubstitute(minRefresh=3,maxRefresh=120,dictionaryObject=jobDictionary)
 
     from nipype.utils.misc import package_check
     # package_check('nipype', '5.4', 'tutorial1') ## HACK: Check nipype version
@@ -440,7 +448,7 @@ def MasterProcessingController(argv=None):
         sp_args=(CACHE_ATLASPATH, CACHE_BCDMODELPATH, CLUSTER_QUEUE, CLUSTER_QUEUE_LONG,
                                   ExperimentBaseDirectoryCache, ExperimentBaseDirectoryResults, subject_data_file,
                                   GLOBAL_DATA_SINK_REWRITE, JOB_SCRIPT, WORKFLOW_COMPONENTS, input_arguments,
-                                  mountPrefix, start_time+delay, subjectid)
+                                  mountPrefix, start_time+delay, subjectid,local_refQstatSubstitute)
         sp_args_list.append(sp_args)
 
     if 'local' in input_arguments.wfrun:
@@ -450,7 +458,7 @@ def MasterProcessingController(argv=None):
     else:
         ## Make a pool of workers to submit simultaneously
         from multiprocessing import Pool
-        myPool = Pool(processes=32,maxtasksperchild=10)
+        myPool = Pool(processes=14,maxtasksperchild=10)
         all_results=myPool.map_async(DoSingleSubjectProcessing,sp_args_list).get(1e100)
 
         for indx in range(0,len(sp_args_list)):
