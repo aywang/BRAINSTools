@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
   NrrdImageType::DirectionType  myDirection = resampleImage->GetDirection();
   itk::MetaDataDictionary       inputMetaDataDictionary = resampleImage->GetMetaDataDictionary();
   GenericTransformType::Pointer baseTransform = 0;
-  if( inputTransform == "ID" )
+  if( inputTransform == "ID"  || inputTransform == "Identity" )
     {
     RigidTransformType::Pointer LocalRigidTransform = RigidTransformType::New();
     LocalRigidTransform->SetIdentity();
@@ -164,7 +164,30 @@ int main(int argc, char *argv[])
   GenericTransformType::Pointer     warpDWIXFRM = 0;
   if(warpDWITransform.size() > 0)
     {
-    warpDWIXFRM = itk::ReadTransformFromDisk(warpDWITransform);
+    if ( warpDWITransform.find(".nii") != std::string::npos )
+      {
+      // Read ReferenceVolume and DeformationVolume
+      typedef double                                                VectorComponentType;
+      typedef itk::Vector<VectorComponentType, 3> VectorPixelType;
+      typedef itk::Image<VectorPixelType,  3>     DisplacementFieldType;
+      typedef itk::DisplacementFieldTransform<VectorComponentType,3> DisplacementFieldTransformType;
+
+      typedef itk::ImageFileReader<DisplacementFieldType> DefFieldReaderType;
+      DefFieldReaderType::Pointer fieldImageReader = DefFieldReaderType::New();
+      fieldImageReader->SetFileName( warpDWITransform );
+      fieldImageReader->Update();
+
+      DisplacementFieldType::Pointer DisplacementField = fieldImageReader->GetOutput();
+
+      DisplacementFieldTransformType::Pointer dispTransform =
+        DisplacementFieldTransformType::New();
+      dispTransform->SetDisplacementField(DisplacementField.GetPointer());
+      warpDWIXFRM = dispTransform.GetPointer();
+      }
+    else
+      {
+      warpDWIXFRM = itk::ReadTransformFromDisk(warpDWITransform);
+      }
     }
   // Get measurement frame and its inverse from DWI scan
   std::vector<std::vector<double> > msrFrame;
