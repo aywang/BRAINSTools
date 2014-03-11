@@ -91,6 +91,8 @@ def WrapPosteriorImagesFromDictionaryFunction(postList):
     retval = {}
     start = len('POSTERIOR_')
     end = len('.nii.gz')
+    assert not postList is None, "Input must be a list, not None"
+    assert isinstance(postList, list), "Input must be a list, not {0}".format(type(postList))
     for fname in postList:
         key = basename(fname)[start:-end]
         value = fname
